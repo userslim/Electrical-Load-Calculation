@@ -1,4 +1,5 @@
-# app.py
+# Complete fixed app.py
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -45,6 +46,13 @@ class RetailShop:
     @property
     def load_kva(self) -> float:
         return self.load_kw / self.power_factor
+    
+    def __post_init__(self):
+        """Validate the data after initialization"""
+        if self.area_sqm < 0:
+            raise ValueError("Area cannot be negative")
+        if self.load_kw < 0:
+            raise ValueError("Load cannot be negative")
 
 # ============================================================================
 # MAIN APPLICATION CLASS
@@ -72,8 +80,8 @@ class ElectricalLoadCalculator:
             "Outdoor Lighting Circuit": 17,
             "Domestic Booster Pump": 3.52,
             "Fire Hose Reel Pump": 2.6,
-            "Refuse Handling Plant": 10,  # estimated
-            "Wet Riser System": 25,  # estimated
+            "Refuse Handling Plant": 10,
+            "Wet Riser System": 25,
             "Sprinkler System": 44,
             "Mech Ventilation": 11
         }
@@ -82,7 +90,7 @@ class ElectricalLoadCalculator:
             "Future Communal Facilities": 42,
             "Bin Centre": 10,
             "Shop (per 100sqm)": 42,
-            "Hawker Centre": 676.88,  # per 3500sqm
+            "Hawker Centre": 676.88,
             "RC Centre": 42,
             "Polyclinic": 881.28,
             "MNO": 41.6,
@@ -110,8 +118,16 @@ class ElectricalLoadCalculator:
     
     def calculate_retail_load(self, shops: List[RetailShop]) -> Dict:
         """Calculate retail shops load"""
-        total_kw = sum(shop.load_kw for shop in shops)
-        total_kva = sum(shop.load_kva for shop in shops)
+        if not shops:
+            return {
+                "total_kw": 0,
+                "total_kva": 0,
+                "shops": []
+            }
+        
+        total_kw = sum(shop.load_kw for shop in shops if shop and hasattr(shop, 'load_kw'))
+        total_kva = sum(shop.load_kva for shop in shops if shop and hasattr(shop, 'load_kva'))
+        
         return {
             "total_kw": total_kw,
             "total_kva": total_kva,
@@ -120,9 +136,9 @@ class ElectricalLoadCalculator:
     
     def calculate_hawker_centre(self, area_sqm: float, cooked_food_stalls: int = 40) -> Dict:
         """Calculate hawker centre load based on typical configuration"""
-        cooked_food_load = cooked_food_stalls * 8  # 8kW per stall
-        lighting_load = area_sqm * 0.02  # 20W/m2
-        mech_vent_load = 8 * 11  # 8 MV motors at 11kW each
+        cooked_food_load = cooked_food_stalls * 8
+        lighting_load = area_sqm * 0.02
+        mech_vent_load = 8 * 11
         
         total_kw = cooked_food_load + lighting_load + mech_vent_load
         total_kva = total_kw / 0.85
@@ -139,8 +155,8 @@ class ElectricalLoadCalculator:
     
     def calculate_polyclinic(self, gfa_sqm: float) -> Dict:
         """Calculate polyclinic load"""
-        normal_supply = gfa_sqm * 0.120  # 120W/m2
-        emergency_supply = gfa_sqm * 0.055  # 55W/m2
+        normal_supply = gfa_sqm * 0.120
+        emergency_supply = gfa_sqm * 0.055
         
         return {
             "gfa_sqm": gfa_sqm,
@@ -299,43 +315,73 @@ def render_facilities_tab(calculator):
 
 def render_retail_shops():
     """Render retail shops input"""
-    st.subheader("🛍️ Retail Shops Details")
+    st.header("🛍️ Retail Shops Details")
     
     # Sample shops from Excel
     sample_shops = [
-        {"name": "Retail (Chinese medicine)", "area": 86.3, "breaker": "63A SPN", "kw": 14.49},
-        {"name": "Convenience Store", "area": 121.28, "breaker": "40A TPN", "kw": 27.712},
-        {"name": "Open Retail", "area": 27.98, "breaker": "63A SPN", "kw": 14.49},
-        {"name": "Halal Café", "area": 121.34, "breaker": "40A TPN", "kw": 27.712},
-        {"name": "Takeaway food", "area": 50.85, "breaker": "63A SPN", "kw": 14.49},
-        {"name": "Gym", "area": 299.93, "breaker": "80A TPN", "kw": 55.424}
+        {"name": "Retail (Chinese medicine)", "area": 86.3, "breaker": "63A SPN", "load_kw": 14.49},
+        {"name": "Convenience Store", "area": 121.28, "breaker": "40A TPN", "load_kw": 27.712},
+        {"name": "Open Retail", "area": 27.98, "breaker": "63A SPN", "load_kw": 14.49},
+        {"name": "Halal Café", "area": 121.34, "breaker": "40A TPN", "load_kw": 27.712},
+        {"name": "Takeaway food", "area": 50.85, "breaker": "63A SPN", "load_kw": 14.49},
+        {"name": "Gym", "area": 299.93, "breaker": "80A TPN", "load_kw": 55.424}
     ]
     
     shops = []
     
-    # Use session state to store shops
+    # Initialize session state for shops if not exists
     if 'shops' not in st.session_state:
-        st.session_state.shops = sample_shops
+        st.session_state.shops = sample_shops.copy()
     
     # Display shops in a dataframe for editing
     df_shops = pd.DataFrame(st.session_state.shops)
+    
+    # Rename columns for display
+    display_df = df_shops.rename(columns={
+        "name": "Shop Name",
+        "area": "Area (m²)",
+        "breaker": "Breaker Size",
+        "load_kw": "Load (kW)"
+    })
+    
     edited_df = st.data_editor(
-        df_shops,
+        display_df,
         use_container_width=True,
         num_rows="dynamic",
         column_config={
-            "name": "Shop Name",
-            "area": st.column_config.NumberColumn("Area (m²)", min_value=0, format="%.2f"),
-            "breaker": "Breaker Size",
-            "kw": st.column_config.NumberColumn("Load (kW)", min_value=0, format="%.3f")
+            "Shop Name": st.column_config.TextColumn("Shop Name", required=True),
+            "Area (m²)": st.column_config.NumberColumn("Area (m²)", min_value=0, format="%.2f", required=True),
+            "Breaker Size": st.column_config.TextColumn("Breaker Size", required=True),
+            "Load (kW)": st.column_config.NumberColumn("Load (kW)", min_value=0, format="%.3f", required=True)
         }
     )
     
-    # Update session state
-    st.session_state.shops = edited_df.to_dict('records')
-    
-    # Convert to RetailShop objects
-    shops = [RetailShop(**shop) for shop in st.session_state.shops]
+    # Convert back to original column names and update session state
+    if not edited_df.empty:
+        updated_shops = []
+        for _, row in edited_df.iterrows():
+            shop_dict = {
+                "name": row["Shop Name"],
+                "area": row["Area (m²)"],
+                "breaker": row["Breaker Size"],
+                "load_kw": row["Load (kW)"]
+            }
+            updated_shops.append(shop_dict)
+        
+        st.session_state.shops = updated_shops
+        
+        # Convert to RetailShop objects
+        try:
+            shops = [RetailShop(
+                name=shop["name"],
+                area_sqm=shop["area"],
+                breaker_size=shop["breaker"],
+                load_kw=shop["load_kw"],
+                power_factor=0.85
+            ) for shop in st.session_state.shops]
+        except Exception as e:
+            st.error(f"Error creating shop objects: {str(e)}")
+            shops = []
     
     return shops
 
@@ -357,7 +403,7 @@ def render_hawker_centre_detail():
     
     # Calculate loads
     cooked_food_load = cooked_food_stalls * 8
-    lighting_load = area * lighting_density / 1000  # convert to kW
+    lighting_load = area * lighting_density / 1000
     mv_load = mv_motors * mv_motor_power
     total_kw = cooked_food_load + lighting_load + mv_load + management_office_ac
     total_kva = total_kw / 0.85
@@ -426,13 +472,20 @@ def render_results(calculator, unit_counts, installation_counts, facility_loads,
     residential_load = calculator.calculate_residential_load(unit_counts)
     common_load = calculator.calculate_common_load(installation_counts)
     
-    # Facilities load
-    facilities_total = sum(facility_loads.values())
+    # Facilities load - ensure we're summing only numeric values
+    facilities_total = 0
+    for facility, load in facility_loads.items():
+        try:
+            facilities_total += float(load) if load else 0
+        except (ValueError, TypeError):
+            pass
     
     # Retail load
-    retail_result = calculator.calculate_retail_load(shops)
+    retail_result = {"total_kva": 0, "total_kw": 0, "shops": []}
+    if shops:
+        retail_result = calculator.calculate_retail_load(shops)
     
-    # Calculate total unmetered and metered (simplified)
+    # Calculate total unmetered and metered
     unmetered_load = residential_load + common_load + facilities_total
     metered_load = retail_result['total_kva']
     
@@ -480,7 +533,7 @@ def render_results(calculator, unit_counts, installation_counts, facility_loads,
     
     # Facilities breakdown
     for facility, load in facility_loads.items():
-        if load > 0:
+        if load and load > 0:
             breakdown_data.append({
                 "Category": "Facilities",
                 "Item": facility,
@@ -489,15 +542,16 @@ def render_results(calculator, unit_counts, installation_counts, facility_loads,
     
     # Retail breakdown
     for shop in shops:
-        breakdown_data.append({
-            "Category": "Retail",
-            "Item": shop.name,
-            "Load (kVA)": shop.load_kva
-        })
+        if shop and hasattr(shop, 'name'):
+            breakdown_data.append({
+                "Category": "Retail",
+                "Item": shop.name,
+                "Load (kVA)": shop.load_kva
+            })
     
-    df_breakdown = pd.DataFrame(breakdown_data)
-    
-    if not df_breakdown.empty:
+    if breakdown_data:
+        df_breakdown = pd.DataFrame(breakdown_data)
+        
         # Pie chart
         fig = px.pie(df_breakdown, values='Load (kVA)', names='Category', 
                      title='Load Distribution by Category')
@@ -514,8 +568,8 @@ def render_results(calculator, unit_counts, installation_counts, facility_loads,
     # Transformer sizing
     st.subheader("🔋 Transformer Sizing")
     
-    transformer_capacity = total_load * 1.1  # 10% margin
-    num_transformers = max(1, int(np.ceil(transformer_capacity / 1000)))  # 1MVA each
+    transformer_capacity = total_load * 1.1
+    num_transformers = max(1, int(np.ceil(transformer_capacity / 1000)))
     
     col1, col2 = st.columns(2)
     with col1:
@@ -544,11 +598,11 @@ def render_results(calculator, unit_counts, installation_counts, facility_loads,
     
     col1, col2 = st.columns(2)
     with col1:
-        st.text_input("PE Name", "Ting Ik Hing")
-        st.text_input("Registration No.", "3348")
+        st.text_input("PE Name", "Ting Ik Hing", key="pe_name_result")
+        st.text_input("Registration No.", "3348", key="pe_reg_result")
     with col2:
-        st.text_input("Firm Name", "Surbana International Consultants Pte Ltd")
-        st.text_input("Date", datetime.now().strftime("%Y-%m-%d"))
+        st.text_input("Firm Name", "Surbana International Consultants Pte Ltd", key="firm_result")
+        st.text_input("Date", datetime.now().strftime("%Y-%m-%d"), key="date_result")
 
 def render_export_options():
     """Render export options"""
@@ -558,7 +612,6 @@ def render_export_options():
     
     with col1:
         if st.button("📄 Export to Excel", use_container_width=True):
-            # Create a simple Excel file
             st.success("Excel export functionality - would generate file")
     
     with col2:
