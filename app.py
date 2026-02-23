@@ -1,4 +1,4 @@
-# app.py - Enhanced version with W/m² for retail shops and additional features
+# app.py - Complete updated version
 
 import streamlit as st
 import pandas as pd
@@ -10,6 +10,7 @@ import plotly.graph_objects as go
 from datetime import datetime
 import json
 import math
+import io
 
 # ============================================================================
 # DATA MODELS
@@ -215,13 +216,15 @@ class ElectricalLoadCalculator:
             "shops": shops
         }
     
-    def calculate_hawker_centre(self, area_sqm: float, cooked_food_stalls: int = 40) -> Dict:
+    def calculate_hawker_centre(self, area_sqm: float, cooked_food_stalls: int = 40, 
+                                lighting_density: float = 20, mv_motors: int = 8,
+                                mv_motor_power: float = 11, office_ac: float = 3) -> Dict:
         """Calculate hawker centre load based on typical configuration"""
         cooked_food_load = cooked_food_stalls * 8  # 8kW per stall
-        lighting_load = area_sqm * 0.02  # 20W/m²
-        mech_vent_load = 8 * 11  # 8 MV motors at 11kW each
+        lighting_load = area_sqm * lighting_density / 1000  # Convert W/m² to kW
+        mech_vent_load = mv_motors * mv_motor_power
         
-        total_kw = cooked_food_load + lighting_load + mech_vent_load
+        total_kw = cooked_food_load + lighting_load + mech_vent_load + office_ac
         total_kva = total_kw / 0.85
         
         diversity = self.diversity_factors.get("hawker", 0.8)
@@ -231,6 +234,7 @@ class ElectricalLoadCalculator:
             "cooked_food_load_kw": cooked_food_load,
             "lighting_load_kw": lighting_load,
             "mech_vent_load_kw": mech_vent_load,
+            "office_ac_kw": office_ac,
             "total_kw": total_kw,
             "total_kva": total_kva,
             "diversity_factor": diversity,
@@ -282,7 +286,6 @@ class ElectricalLoadCalculator:
         data = cable_data[cable_size_mm2]
         
         # Voltage drop calculation: Vd = √3 × I × L × (Rcosφ + Xsinφ) / 1000
-        import math
         sin_phi = math.sqrt(1 - power_factor**2)
         
         voltage_drop_v = math.sqrt(3) * current_a * (length_m/1000) * \
@@ -480,9 +483,6 @@ def render_facilities_tab(calculator):
         facility_loads["Bin Centre"] = st.number_input("Bin Centre (10 kVA)", 0, 100, 0)
         facility_loads["RC Centre"] = st.number_input("RC Centre (42 kVA)", 0, 100, 0)
         facility_loads["CC"] = st.number_input("CC (693 kVA)", 0, 2000, 0)
-        
-        st.subheader("Retail")
-        num_shops = st.number_input("Number of Retail Shops", 0, 20, 6)
     
     with col2:
         st.subheader("Healthcare")
@@ -495,7 +495,7 @@ def render_facilities_tab(calculator):
         facility_loads["EPS"] = st.number_input("EPS (14 kVA)", 0, 500, 0)
         facility_loads["Mech"] = st.number_input("Mech (762 kVA)", 0, 2000, 0)
     
-    return facility_loads, num_shops
+    return facility_loads
 
 def render_retail_shops(calculator):
     """Render retail shops input with W/m² calculation"""
@@ -542,33 +542,14 @@ def render_retail_shops(calculator):
         'load_kw': 'Load (kW)'
     })
     
-    # Create column config based on input method
+    # Create column config
     column_config = {
         "Shop Name": st.column_config.TextColumn("Shop Name", required=True),
         "Area (m²)": st.column_config.NumberColumn("Area (m²)", min_value=0, format="%.2f", required=True),
+        "Load Density (W/m²)": st.column_config.NumberColumn("Load Density (W/m²)", min_value=0, format="%.0f", required=True),
         "Breaker Size": st.column_config.TextColumn("Breaker Size", required=True),
         "Load (kW)": st.column_config.NumberColumn("Load (kW)", format="%.3f", disabled=True)
     }
-    
-    if load_density_option == "Select from preset":
-        # Add dropdown for load density preset
-        density_options = list(calculator.retail_load_densities.keys())
-        
-        # We need to handle this differently - create a selectbox for each row
-        st.warning("For preset selection, please edit each row individually in the table below with the 'Load Density (W/m²)' column")
-        column_config["Load Density (W/m²)"] = st.column_config.NumberColumn(
-            "Load Density (W/m²)", 
-            min_value=0, 
-            format="%.0f",
-            required=True
-        )
-    else:
-        column_config["Load Density (W/m²)"] = st.column_config.NumberColumn(
-            "Load Density (W/m²)", 
-            min_value=0, 
-            format="%.0f",
-            required=True
-        )
     
     edited_df = st.data_editor(
         display_df,
@@ -581,9 +562,6 @@ def render_retail_shops(calculator):
     if not edited_df.empty:
         updated_shops = []
         for _, row in edited_df.iterrows():
-            # Recalculate load_kw
-            load_kw_calc = (row["Area (m²)"] * row["Load Density (W/m²)"]) / 1000
-            
             shop_dict = {
                 "name": row["Shop Name"],
                 "area": row["Area (m²)"],
@@ -942,7 +920,8 @@ def render_results(calculator, unit_counts, installation_counts, facility_loads,
             df_sorted = df_breakdown.sort_values('Load (kVA)', ascending=False).head(10)
             fig2 = px.bar(df_sorted, x='Item', y='Load (kVA)', color='Category',
                           title='Top 10 Individual Loads')
-            fig2.update_xaxis(tickangle=45)
+            # FIXED: Changed from update_xaxis to update_xaxes
+            fig2.update_xaxes(tickangle=45)
             st.plotly_chart(fig2, use_container_width=True)
         
         # Table
@@ -985,20 +964,14 @@ def render_results(calculator, unit_counts, installation_counts, facility_loads,
     st.subheader("⚡ Standby Generator Sizing")
     
     # Emergency loads (typically 30-40% of essential loads)
-    emergency_load_factors = {
-        "Polyclinic": 0.4,
-        "KDC": 0.3,
-        "CC": 0.2,
-        "Lifts": 0.5,
-        "Fire Pumps": 1.0
-    }
-    
     emergency_load = 0
     emergency_load += facility_loads.get("Polyclinic", 0) * 0.4
     emergency_load += facility_loads.get("KDC", 0) * 0.3
     emergency_load += facility_loads.get("CC", 0) * 0.2
     emergency_load += installation_counts.get("Service Lift (20 man)", 0) * 35 * 0.5
     emergency_load += installation_counts.get("Fire Hose Reel Pump", 0) * 2.6 * 1.0
+    emergency_load += installation_counts.get("Escalator", 0) * 22 * 0.3
+    emergency_load += installation_counts.get("Public Lighting Circuit", 0) * 12 * 0.8
     
     # Round up to nearest 50kVA
     generator_size = math.ceil(emergency_load / 50) * 50
@@ -1009,6 +982,16 @@ def render_results(calculator, unit_counts, installation_counts, facility_loads,
         st.metric("Emergency Load", f"{emergency_load:.0f} kVA")
     with col_g2:
         st.metric("Recommended Generator", f"{generator_size:.0f} kVA")
+    
+    # Motor starting check
+    largest_motor = max(
+        installation_counts.get("Escalator", 0) * 22,
+        installation_counts.get("Service Lift (20 man)", 0) * 35,
+        installation_counts.get("Fire Hose Reel Pump", 0) * 2.6
+    )
+    
+    if largest_motor * 3 > generator_size:  # 3x for star-delta starting
+        st.warning(f"⚠️ Generator may need to be upsized for motor starting (largest motor: {largest_motor:.0f} kVA)")
     
     # Professional declaration
     st.subheader("📝 Professional Engineer's Declaration")
@@ -1146,7 +1129,7 @@ def main():
         installation_counts = render_common_services_tab(calculator)
     
     with tab3:
-        facility_loads, num_shops = render_facilities_tab(calculator)
+        facility_loads = render_facilities_tab(calculator)
     
     with tab4:
         shops = render_retail_shops(calculator)
