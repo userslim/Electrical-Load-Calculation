@@ -1,4 +1,4 @@
-# app.py - Complete updated version with Cable Containment Sizing
+# app.py - Complete updated version with fixed sample data button
 
 import streamlit as st
 import pandas as pd
@@ -468,7 +468,7 @@ class ElectricalLoadCalculator:
 def render_sidebar():
     """Render sidebar with project info"""
     with st.sidebar:
-        st.image("https://via.placeholder.com/300x100.png?text=Mix Development+Logo", use_column_width=True)
+        st.image("https://via.placeholder.com/300x100.png?text=HDB+Logo", use_column_width=True)
         st.title("Project Information")
         
         project_title = st.text_input("Project Title", "PROPOSED PUBLIC HOUSING DEVELOPMENT")
@@ -478,10 +478,10 @@ def render_sidebar():
         st.divider()
         
         st.subheader("Professional Engineer")
-        pe_name = st.text_input("Name", "Input Name")
-        pe_reg_no = st.text_input("Registration No.", "Input Number")
-        firm_name = st.text_input("Firm Name", "Input Company")
-        telephone = st.text_input("Telephone No.", "Inout Number")
+        pe_name = st.text_input("Name", "Ting Ik Hing")
+        pe_reg_no = st.text_input("Registration No.", "3348")
+        firm_name = st.text_input("Firm Name", "Surbana International Consultants Pte Ltd")
+        telephone = st.text_input("Telephone No.", "62481315")
         
         st.divider()
         
@@ -498,7 +498,7 @@ def render_sidebar():
         }
 
 def render_residential_tab(calculator):
-    """Render residential units input tab"""
+    """Render residential units input tab (fixed sample button)"""
     st.header("🏢 Residential Units")
     
     col1, col2 = st.columns(2)
@@ -511,7 +511,7 @@ def render_residential_tab(calculator):
             unit_counts[unit_type] = st.number_input(
                 f"{unit_type} ({load} kVA)",
                 min_value=0,
-                value=0,
+                value=st.session_state.get(f"res_{i}", 0),
                 step=1,
                 key=f"res_{i}"
             )
@@ -519,25 +519,25 @@ def render_residential_tab(calculator):
     with col2:
         st.subheader("Unit Types (cont.)")
         for i, (unit_type, load) in enumerate(list(calculator.residential_units.items())[3:]):
+            idx = i + 3
             unit_counts[unit_type] = st.number_input(
                 f"{unit_type} ({load} kVA)",
                 min_value=0,
-                value=0,
+                value=st.session_state.get(f"res_{idx}", 0),
                 step=1,
-                key=f"res_{i+3}"
+                key=f"res_{idx}"
             )
     
     # Sample data from Excel
     with st.expander("📋 Load Sample Data"):
         if st.button("Load Sample Residential Data"):
-            unit_counts = {
-                "Studio Apartment (1-room)": 0,
-                "Studio Apartment (2-room)": 0,
-                "2-room flat": 68,
-                "3-room flat": 0,
-                "4-room flat": 0,
-                "5-room flat": 515
-            }
+            # Set session state keys for the sample data
+            st.session_state["res_0"] = 0  # Studio 1-room
+            st.session_state["res_1"] = 0  # Studio 2-room
+            st.session_state["res_2"] = 68  # 2-room flat
+            st.session_state["res_3"] = 0   # 3-room flat
+            st.session_state["res_4"] = 0   # 4-room flat
+            st.session_state["res_5"] = 515 # 5-room flat
             st.success("Sample data loaded!")
             st.rerun()
     
@@ -1162,7 +1162,6 @@ def render_results(calculator, unit_counts, installation_counts, facility_loads,
             df_sorted = df_breakdown.sort_values('Load (kVA)', ascending=False).head(10)
             fig2 = px.bar(df_sorted, x='Item', y='Load (kVA)', color='Category',
                           title='Top 10 Individual Loads')
-            # FIXED: Changed from update_xaxis to update_xaxes
             fig2.update_xaxes(tickangle=45)
             st.plotly_chart(fig2, use_container_width=True)
         
@@ -1320,7 +1319,7 @@ def render_export_options(calculator, unit_counts, installation_counts, facility
 
 def main():
     st.set_page_config(
-        page_title="Mix Development Electrical Load Calculator",
+        page_title="HDB Electrical Load Calculator",
         page_icon="⚡",
         layout="wide"
     )
@@ -1349,7 +1348,7 @@ def main():
     """, unsafe_allow_html=True)
     
     # Header
-    st.markdown('<div class="main-header"><h1>⚡ Mix Development Electrical Design Load Calculator</h1><p>Professional Edition - With W/m² Retail & Containment Sizing</p></div>', 
+    st.markdown('<div class="main-header"><h1>⚡ HDB Electrical Design Load Calculator</h1><p>Professional Edition - With W/m² Retail & Containment Sizing</p></div>', 
                 unsafe_allow_html=True)
     
     # Initialize calculator
@@ -1405,9 +1404,7 @@ def main():
     
     # Footer
     st.divider()
-    st.caption(f"© 2026 Mix Development - Electrical Design Load Calculator v4.0 | Project: {project_info['project_title']} | Reference: {project_info['project_ref']}")
+    st.caption(f"© 2024 HDB - Electrical Design Load Calculator v4.0 | Project: {project_info['project_title']} | Reference: {project_info['project_ref']}")
 
 if __name__ == "__main__":
     main()
-
-
