@@ -1,4 +1,4 @@
-# app.py - Complete updated version
+# app.py - Complete updated version with Cable Containment Sizing
 
 import streamlit as st
 import pandas as pd
@@ -76,6 +76,14 @@ class VoltageDrop:
     percentage: float
     is_compliant: bool
     recommended_cable: str
+
+@dataclass
+class ContainmentItem:
+    """Represents an item contributing to cable containment"""
+    description: str
+    cable_size_mm2: str      # e.g., "2.5"
+    quantity: int
+    cable_outer_diameter_mm: float   # overall diameter including insulation
 
 # ============================================================================
 # MAIN APPLICATION CLASS
@@ -172,6 +180,51 @@ class ElectricalLoadCalculator:
             "185": 341,
             "240": 400,
             "300": 458
+        }
+        
+        # Cable outer diameters (including insulation) in mm for typical PVC/PVC cables
+        self.cable_outer_diameter = {
+            "1.5": 8.0,
+            "2.5": 8.8,
+            "4": 9.8,
+            "6": 10.9,
+            "10": 12.8,
+            "16": 14.9,
+            "25": 18.2,
+            "35": 20.5,
+            "50": 23.4,
+            "70": 26.5,
+            "95": 29.8,
+            "120": 32.6,
+            "150": 35.8,
+            "185": 39.2,
+            "240": 44.5,
+            "300": 49.0
+        }
+        
+        # Standard containment sizes (width x height in mm) - tray/trunking
+        self.standard_containment_sizes = [
+            (50, 50), (75, 50), (100, 50), (100, 75), (100, 100),
+            (150, 50), (150, 75), (150, 100), (150, 150),
+            (200, 50), (200, 75), (200, 100), (200, 150), (200, 200),
+            (300, 100), (300, 150), (300, 200), (300, 300),
+            (400, 100), (400, 150), (400, 200), (400, 300), (400, 400),
+            (500, 100), (500, 150), (500, 200), (500, 300), (500, 400), (500, 500)
+        ]
+        
+        # Mapping from accessory type to typical cable size
+        self.accessory_cable_map = {
+            "13A Switched Socket Outlet": "2.5",
+            "13A Switch (Light)": "1.5",
+            "20A Isolator": "4",
+            "32A Isolator": "6",
+            "Lighting Point": "1.5",
+            "13A Unswitched Socket": "2.5",
+            "Fan Point": "1.5",
+            "Water Heater Point": "4",
+            "Air Conditioner Point (13A)": "2.5",
+            "Air Conditioner Point (15A)": "2.5",
+            "Cooker Point (45A)": "10"
         }
         
     def calculate_residential_load(self, unit_counts: Dict[str, int]) -> float:
@@ -352,6 +405,60 @@ class ElectricalLoadCalculator:
             "target_kvar": target_kvar,
             "required_capacitor_kvar": required_kvar,
             "estimated_savings_pct": ((current_pf - target_pf) / current_pf) * 100
+        }
+    
+    def calculate_containment_size(self, items: List[ContainmentItem], fill_ratio: float = 0.4) -> Dict:
+        """Calculate required containment size based on items and fill ratio"""
+        if not items:
+            return {"total_area_mm2": 0, "recommended_size": "None", "fill_percentage": 0}
+        
+        # Calculate total cross-sectional area of cables (assuming circular)
+        total_area = 0
+        breakdown = []
+        for item in items:
+            if item.quantity > 0 and item.cable_size_mm2 in self.cable_outer_diameter:
+                dia = self.cable_outer_diameter[item.cable_size_mm2]
+                area_per_cable = math.pi * (dia/2)**2  # mm²
+                item_area = area_per_cable * item.quantity
+                total_area += item_area
+                breakdown.append({
+                    "Description": item.description,
+                    "Cable Size (mm²)": item.cable_size_mm2,
+                    "Quantity": item.quantity,
+                    "Area per Cable (mm²)": round(area_per_cable, 2),
+                    "Total Area (mm²)": round(item_area, 2)
+                })
+        
+        # Required containment area considering fill ratio
+        required_area = total_area / fill_ratio
+        
+        # Find smallest standard containment that meets required_area
+        recommended_size = None
+        for width, height in sorted(self.standard_containment_sizes, key=lambda x: x[0]*x[1]):
+            area = width * height
+            if area >= required_area:
+                recommended_size = f"{width} x {height} mm"
+                break
+        
+        if recommended_size is None:
+            recommended_size = "Exceeds standard sizes, custom required"
+        
+        # Calculate actual fill percentage if we pick that size
+        if recommended_size != "Exceeds standard sizes, custom required":
+            # Find dimensions
+            w, h = map(int, recommended_size.replace(' mm','').split(' x '))
+            containment_area = w * h
+            fill_pct = (total_area / containment_area) * 100
+        else:
+            fill_pct = 0
+        
+        return {
+            "total_area_mm2": total_area,
+            "required_area_mm2": required_area,
+            "fill_ratio": fill_ratio,
+            "recommended_size": recommended_size,
+            "fill_percentage": fill_pct,
+            "breakdown": breakdown
         }
 
 # ============================================================================
@@ -811,6 +918,141 @@ def render_power_factor_correction(calculator):
         
         st.info(f"💰 Estimated savings: {pfc['estimated_savings_pct']:.1f}% reduction in reactive power charges")
 
+def render_containment_tab(calculator):
+    """Render cable containment sizing tab"""
+    st.header("📦 Cable Containment Sizing")
+    
+    st.markdown("""
+    This tool helps you determine the required cable tray or trunking size based on the number of final circuits/accessories.
+    Each accessory type is mapped to a typical cable size. The total cross-sectional area of cables is calculated, and a containment size is recommended based on a standard fill ratio.
+    """)
+    
+    # Input quantities for different accessories
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("Socket Outlets & Switches")
+        qty_13a_switched_socket = st.number_input("13A Switched Socket Outlets", min_value=0, value=0, step=1)
+        qty_13a_switch = st.number_input("13A Switches (Light)", min_value=0, value=0, step=1)
+        qty_13a_unswitched = st.number_input("13A Unswitched Socket Outlets", min_value=0, value=0, step=1)
+        qty_20a_isolator = st.number_input("20A Isolators", min_value=0, value=0, step=1)
+        qty_32a_isolator = st.number_input("32A Isolators", min_value=0, value=0, step=1)
+    
+    with col2:
+        st.subheader("Other Points")
+        qty_lighting = st.number_input("Lighting Points", min_value=0, value=0, step=1)
+        qty_fan = st.number_input("Fan Points", min_value=0, value=0, step=1)
+        qty_water_heater = st.number_input("Water Heater Points", min_value=0, value=0, step=1)
+        qty_ac_13a = st.number_input("AC Points (13A)", min_value=0, value=0, step=1)
+        qty_cooker = st.number_input("Cooker Points (45A)", min_value=0, value=0, step=1)
+    
+    # Allow custom cable entries
+    st.subheader("Custom Cable Entries (if any)")
+    st.info("Add custom cables if your installation includes non-standard circuits.")
+    
+    custom_items = []
+    num_custom = st.number_input("Number of custom cable types", min_value=0, max_value=10, value=0, step=1)
+    
+    if num_custom > 0:
+        for i in range(num_custom):
+            col_a, col_b, col_c = st.columns(3)
+            with col_a:
+                desc = st.text_input(f"Description {i+1}", key=f"custom_desc_{i}")
+            with col_b:
+                cable_size = st.selectbox(f"Cable size (mm²) {i+1}", 
+                                           options=list(calculator.cable_outer_diameter.keys()),
+                                           key=f"custom_size_{i}")
+            with col_c:
+                qty = st.number_input(f"Quantity {i+1}", min_value=0, value=0, step=1, key=f"custom_qty_{i}")
+            if desc and qty > 0:
+                custom_items.append(ContainmentItem(
+                    description=desc,
+                    cable_size_mm2=cable_size,
+                    quantity=qty,
+                    cable_outer_diameter_mm=calculator.cable_outer_diameter[cable_size]
+                ))
+    
+    # Fill ratio
+    fill_ratio = st.slider("Cable Fill Ratio (typical 40%)", 0.2, 0.6, 0.4, 0.05)
+    
+    if st.button("Calculate Containment Size", type="primary"):
+        # Build list of items
+        items = []
+        
+        # Map quantities to ContainmentItem
+        mapping = [
+            ("13A Switched Socket Outlet", qty_13a_switched_socket, "2.5"),
+            ("13A Switch (Light)", qty_13a_switch, "1.5"),
+            ("13A Unswitched Socket", qty_13a_unswitched, "2.5"),
+            ("20A Isolator", qty_20a_isolator, "4"),
+            ("32A Isolator", qty_32a_isolator, "6"),
+            ("Lighting Point", qty_lighting, "1.5"),
+            ("Fan Point", qty_fan, "1.5"),
+            ("Water Heater Point", qty_water_heater, "4"),
+            ("AC Point (13A)", qty_ac_13a, "2.5"),
+            ("Cooker Point (45A)", qty_cooker, "10")
+        ]
+        
+        for desc, qty, cable_size in mapping:
+            if qty > 0:
+                items.append(ContainmentItem(
+                    description=desc,
+                    cable_size_mm2=cable_size,
+                    quantity=qty,
+                    cable_outer_diameter_mm=calculator.cable_outer_diameter[cable_size]
+                ))
+        
+        # Add custom items
+        items.extend(custom_items)
+        
+        if not items:
+            st.warning("Please enter at least one item.")
+            return
+        
+        result = calculator.calculate_containment_size(items, fill_ratio)
+        
+        # Display results
+        st.subheader("Recommended Containment Size")
+        
+        col_res1, col_res2, col_res3 = st.columns(3)
+        with col_res1:
+            st.metric("Total Cable Area", f"{result['total_area_mm2']:.0f} mm²")
+        with col_res2:
+            st.metric("Required Area (with fill)", f"{result['required_area_mm2']:.0f} mm²")
+        with col_res3:
+            st.metric("Recommended Size", result['recommended_size'])
+        
+        # Fill percentage gauge
+        if result['recommended_size'] != "Exceeds standard sizes, custom required":
+            fill_pct = result['fill_percentage']
+            fig = go.Figure(go.Indicator(
+                mode = "gauge+number",
+                value = fill_pct,
+                domain = {'x': [0, 1], 'y': [0, 1]},
+                title = {'text': "Fill Percentage"},
+                gauge = {
+                    'axis': {'range': [None, 100]},
+                    'bar': {'color': "darkblue"},
+                    'steps': [
+                        {'range': [0, 40], 'color': "lightgreen"},
+                        {'range': [40, 60], 'color': "yellow"},
+                        {'range': [60, 100], 'color': "salmon"}],
+                    'threshold': {
+                        'line': {'color': "red", 'width': 4},
+                        'thickness': 0.75,
+                        'value': fill_ratio*100
+                    }
+                }
+            ))
+            fig.update_layout(height=300)
+            st.plotly_chart(fig, use_container_width=True)
+        
+        # Detailed breakdown
+        st.subheader("Cable Area Breakdown")
+        if result['breakdown']:
+            df_breakdown = pd.DataFrame(result['breakdown'])
+            st.dataframe(df_breakdown, use_container_width=True)
+
 def render_results(calculator, unit_counts, installation_counts, facility_loads, shops, hawker_detail):
     """Render calculation results"""
     st.header("📊 Electrical Load Summary")
@@ -1107,7 +1349,7 @@ def main():
     """, unsafe_allow_html=True)
     
     # Header
-    st.markdown('<div class="main-header"><h1>⚡ HDB Electrical Design Load Calculator</h1><p>Professional Edition - With W/m² Retail Calculation</p></div>', 
+    st.markdown('<div class="main-header"><h1>⚡ HDB Electrical Design Load Calculator</h1><p>Professional Edition - With W/m² Retail & Containment Sizing</p></div>', 
                 unsafe_allow_html=True)
     
     # Initialize calculator
@@ -1117,9 +1359,9 @@ def main():
     project_info = render_sidebar()
     
     # Main content with tabs
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
         "🏢 Residential", "⚙️ Common Services", "🏛️ Facilities", 
-        "🛍️ Retail", "🍜 Hawker Centre", "🔌 Distribution", "📊 Results"
+        "🛍️ Retail", "🍜 Hawker Centre", "🔌 Distribution", "📦 Containment", "📊 Results"
     ])
     
     with tab1:
@@ -1151,6 +1393,9 @@ def main():
             render_fault_current_calculator(calculator)
     
     with tab7:
+        render_containment_tab(calculator)
+    
+    with tab8:
         render_results(calculator, unit_counts, installation_counts, facility_loads, shops, hawker_detail)
         render_export_options(calculator, unit_counts, installation_counts, facility_loads, shops, hawker_detail)
         
@@ -1160,7 +1405,7 @@ def main():
     
     # Footer
     st.divider()
-    st.caption(f"© 2024 HDB - Electrical Design Load Calculator v3.0 | Project: {project_info['project_title']} | Reference: {project_info['project_ref']}")
+    st.caption(f"© 2024 HDB - Electrical Design Load Calculator v4.0 | Project: {project_info['project_title']} | Reference: {project_info['project_ref']}")
 
 if __name__ == "__main__":
     main()
