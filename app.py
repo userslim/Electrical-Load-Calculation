@@ -478,10 +478,10 @@ def render_sidebar():
         st.divider()
         
         st.subheader("Professional Engineer")
-        pe_name = st.text_input("Name", "Ting Ik Hing")
-        pe_reg_no = st.text_input("Registration No.", "3348")
-        firm_name = st.text_input("Firm Name", "Surbana International Consultants Pte Ltd")
-        telephone = st.text_input("Telephone No.", "62481315")
+        pe_name = st.text_input("Name", "Input Name")
+        pe_reg_no = st.text_input("Registration No.", "Input Number")
+        firm_name = st.text_input("Firm Name", "Input Company")
+        telephone = st.text_input("Telephone No.", "Inout Number")
         
         st.divider()
         
@@ -1320,7 +1320,7 @@ def render_export_options(calculator, unit_counts, installation_counts, facility
 
 def main():
     st.set_page_config(
-        page_title="HDB Electrical Load Calculator",
+        page_title="Mix Development Electrical Load Calculator",
         page_icon="⚡",
         layout="wide"
     )
@@ -1409,3 +1409,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
