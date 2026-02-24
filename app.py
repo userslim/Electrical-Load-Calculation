@@ -468,7 +468,7 @@ class ElectricalLoadCalculator:
 def render_sidebar():
     """Render sidebar with project info"""
     with st.sidebar:
-        st.image("https://via.placeholder.com/300x100.png?text=HDB+Logo", use_column_width=True)
+        st.image("https://via.placeholder.com/300x100.png?text=Mix Development+Logo", use_column_width=True)
         st.title("Project Information")
         
         project_title = st.text_input("Project Title", "PROPOSED PUBLIC HOUSING DEVELOPMENT")
@@ -1349,7 +1349,7 @@ def main():
     """, unsafe_allow_html=True)
     
     # Header
-    st.markdown('<div class="main-header"><h1>⚡ HDB Electrical Design Load Calculator</h1><p>Professional Edition - With W/m² Retail & Containment Sizing</p></div>', 
+    st.markdown('<div class="main-header"><h1>⚡ Mix Development Electrical Design Load Calculator</h1><p>Professional Edition - With W/m² Retail & Containment Sizing</p></div>', 
                 unsafe_allow_html=True)
     
     # Initialize calculator
@@ -1405,8 +1405,9 @@ def main():
     
     # Footer
     st.divider()
-    st.caption(f"© 2024 HDB - Electrical Design Load Calculator v4.0 | Project: {project_info['project_title']} | Reference: {project_info['project_ref']}")
+    st.caption(f"© 2026 Mix Development - Electrical Design Load Calculator v4.0 | Project: {project_info['project_title']} | Reference: {project_info['project_ref']}")
 
 if __name__ == "__main__":
     main()
+
 
