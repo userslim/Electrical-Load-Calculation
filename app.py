@@ -308,7 +308,7 @@ def render_sidebar():
         pe_name = st.text_input("Name", "Name")
         pe_reg = st.text_input("Registration No.", "Number")
         firm = st.text_input("Firm Name", "Company")
-        tel = st.text_input("Telephone No.", "Number)
+        tel = st.text_input("Telephone No.", "Number")
         st.divider()
         st.date_input("Date", datetime.now())
         return {"project_title": proj, "project_ref": ref, "location": loc,
@@ -970,4 +970,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
