@@ -298,17 +298,17 @@ class ElectricalLoadCalculator:
 
 def render_sidebar():
     with st.sidebar:
-        st.image("https://via.placeholder.com/300x100.png?text=HDB+Logo", use_column_width=True)
+        st.image("https://via.placeholder.com/300x100.png?text=MixD+Logo", use_column_width=True)
         st.title("Project Information")
-        proj = st.text_input("Project Title", "PROPOSED PUBLIC HOUSING DEVELOPMENT")
+        proj = st.text_input("Project Title", "MIX DEVELOPMENT")
         ref = st.text_input("Project Reference No.", "Axxx")
         loc = st.text_input("Location Description", "CCK")
         st.divider()
         st.subheader("Professional Engineer")
-        pe_name = st.text_input("Name", "Ting Ik Hing")
-        pe_reg = st.text_input("Registration No.", "3348")
-        firm = st.text_input("Firm Name", "Surbana International Consultants Pte Ltd")
-        tel = st.text_input("Telephone No.", "62481315")
+        pe_name = st.text_input("Name", "Name")
+        pe_reg = st.text_input("Registration No.", "Number")
+        firm = st.text_input("Firm Name", "Company")
+        tel = st.text_input("Telephone No.", "Number)
         st.divider()
         st.date_input("Date", datetime.now())
         return {"project_title": proj, "project_ref": ref, "location": loc,
@@ -890,9 +890,9 @@ def render_results_tab(calc, unit_counts, inst_counts, fac_loads, shops, hawk):
     I, the Professional Engineer for the declared Electrical Works, hereby submit the electrical design load data and calculation and confirm that the details given in this form are to the best of my knowledge true and correct.
     """)
     pe1, pe2 = st.columns(2)
-    pe1.text_input("PE Name", "Ting Ik Hing", key="pe_name_res")
-    pe1.text_input("Registration No.", "3348", key="pe_reg_res")
-    pe2.text_input("Firm Name", "Surbana International Consultants Pte Ltd", key="firm_res")
+    pe1.text_input("PE Name", "Name", key="pe_name_res")
+    pe1.text_input("Registration No.", "Number", key="pe_reg_res")
+    pe2.text_input("Firm Name", "Company", key="firm_res")
     pe2.text_input("Date", datetime.now().strftime("%Y-%m-%d"), key="date_res")
 
 
@@ -916,7 +916,7 @@ def render_export_tab(calc, unit_counts, inst_counts, fac_loads, shops, hawk):
 # ============================================================================
 
 def main():
-    st.set_page_config(page_title="HDB Electrical Load Calculator", page_icon="⚡", layout="wide")
+    st.set_page_config(page_title="MixD Electrical Load Calculator", page_icon="⚡", layout="wide")
     st.markdown("""
     <style>
     .stApp { background-color: #f5f7f9; }
@@ -927,7 +927,7 @@ def main():
     .stMetric { background-color: white; padding: 1rem; border-radius: 0.5rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
     </style>
     """, unsafe_allow_html=True)
-    st.markdown('<div class="main-header"><h1>⚡ HDB Electrical Design Load Calculator</h1><p>Professional Edition - With W/m² Retail & Containment Sizing</p></div>',
+    st.markdown('<div class="main-header"><h1>⚡ MixD Electrical Design Load Calculator</h1><p>Professional Edition - With W/m² Retail & Containment Sizing</p></div>',
                 unsafe_allow_html=True)
 
     calc = ElectricalLoadCalculator()
@@ -965,8 +965,9 @@ def main():
             render_pfc_tab(calc)
 
     st.divider()
-    st.caption(f"© 2024 HDB - Electrical Design Load Calculator v5.0 | Project: {proj_info['project_title']} | Reference: {proj_info['project_ref']}")
+    st.caption(f"© 2026 MixD - Electrical Design Load Calculator v5.0 | Project: {proj_info['project_title']} | Reference: {proj_info['project_ref']}")
 
 
 if __name__ == "__main__":
     main()
+
