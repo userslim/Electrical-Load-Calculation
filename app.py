@@ -1,4 +1,4 @@
-# app.py - Final version with all features and fixed sample button
+# app.py - Final version with Cable Schedule
 
 import streamlit as st
 import pandas as pd
@@ -670,6 +670,133 @@ def render_containment_tab(calc):
             st.dataframe(pd.DataFrame(res['breakdown']), use_container_width=True)
 
 
+# ============================================================================
+# NEW CABLE SCHEDULE TAB
+# ============================================================================
+
+def render_cable_schedule_tab(calc):
+    st.header("📋 Cable Schedule")
+    st.markdown("""
+    This tab generates a cable schedule based on the quantities entered in the **Containment** tab.
+    Enter the average length per cable size to get total lengths and drum requirements.
+    """)
+
+    # Retrieve quantities from session state (set by containment inputs)
+    # Use .get() with defaults in case the user hasn't visited the containment tab
+    qty_map = {
+        "1.5": st.session_state.get("con_light", 0) + st.session_state.get("con_fan", 0) + st.session_state.get("con_13l", 0),
+        "2.5": st.session_state.get("con_13s", 0) + st.session_state.get("con_13u", 0) + st.session_state.get("con_ac", 0),
+        "4": st.session_state.get("con_20", 0) + st.session_state.get("con_wh", 0),
+        "6": st.session_state.get("con_32", 0),
+        "10": st.session_state.get("con_cook", 0)
+    }
+
+    st.subheader("Standard Circuits (from Containment Tab)")
+    st.info("Quantities shown below are taken from your inputs in the Containment tab. Adjust if needed.")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("**Lighting & Small Power (1.5mm²)**")
+        qty_15 = st.number_input("Number of 1.5mm² circuits", min_value=0, value=int(qty_map["1.5"]), step=1, key="cs_15")
+        len_15 = st.number_input("Average length per circuit (m)", min_value=0.0, value=30.0, step=5.0, key="cs_len_15")
+        st.markdown("**Socket Outlets (2.5mm²)**")
+        qty_25 = st.number_input("Number of 2.5mm² circuits", min_value=0, value=int(qty_map["2.5"]), step=1, key="cs_25")
+        len_25 = st.number_input("Average length per circuit (m)", min_value=0.0, value=25.0, step=5.0, key="cs_len_25")
+        st.markdown("**20A Circuits (4mm²)**")
+        qty_4 = st.number_input("Number of 4mm² circuits", min_value=0, value=int(qty_map["4"]), step=1, key="cs_4")
+        len_4 = st.number_input("Average length per circuit (m)", min_value=0.0, value=20.0, step=5.0, key="cs_len_4")
+
+    with col2:
+        st.markdown("**32A Circuits (6mm²)**")
+        qty_6 = st.number_input("Number of 6mm² circuits", min_value=0, value=int(qty_map["6"]), step=1, key="cs_6")
+        len_6 = st.number_input("Average length per circuit (m)", min_value=0.0, value=18.0, step=5.0, key="cs_len_6")
+        st.markdown("**Cooker Circuits (10mm²)**")
+        qty_10 = st.number_input("Number of 10mm² circuits", min_value=0, value=int(qty_map["10"]), step=1, key="cs_10")
+        len_10 = st.number_input("Average length per circuit (m)", min_value=0.0, value=15.0, step=5.0, key="cs_len_10")
+
+    # Custom cables
+    st.subheader("Custom Cables (e.g., main feeders, sub‑mains)")
+    num_custom = st.number_input("Number of custom cable types", min_value=0, max_value=10, value=0, step=1, key="cs_custom_num")
+    custom_data = []
+    for i in range(num_custom):
+        cols = st.columns(4)
+        with cols[0]:
+            desc = st.text_input(f"Description {i+1}", key=f"cs_desc_{i}")
+        with cols[1]:
+            size = st.selectbox(f"Size (mm²) {i+1}", list(calc.cable_outer_diameter.keys()), key=f"cs_size_{i}")
+        with cols[2]:
+            qty = st.number_input(f"Quantity {i+1}", min_value=0, value=0, step=1, key=f"cs_qty_{i}")
+        with cols[3]:
+            length = st.number_input(f"Length per cable (m) {i+1}", min_value=0.0, value=50.0, step=10.0, key=f"cs_len_{i}")
+        if desc and qty > 0:
+            custom_data.append((desc, size, qty, length))
+
+    # Calculate total lengths
+    data = []
+    # Standard sizes
+    if qty_15 > 0:
+        total_len = qty_15 * len_15
+        data.append(["Lighting/Small Power", "1.5", qty_15, len_15, total_len])
+    if qty_25 > 0:
+        total_len = qty_25 * len_25
+        data.append(["Socket Outlets", "2.5", qty_25, len_25, total_len])
+    if qty_4 > 0:
+        total_len = qty_4 * len_4
+        data.append(["20A Circuits", "4", qty_4, len_4, total_len])
+    if qty_6 > 0:
+        total_len = qty_6 * len_6
+        data.append(["32A Circuits", "6", qty_6, len_6, total_len])
+    if qty_10 > 0:
+        total_len = qty_10 * len_10
+        data.append(["Cooker Circuits", "10", qty_10, len_10, total_len])
+    # Custom
+    for desc, size, qty, length in custom_data:
+        total_len = qty * length
+        data.append([desc, size, qty, length, total_len])
+
+    if data:
+        df = pd.DataFrame(data, columns=["Description", "Size (mm²)", "Quantity", "Length per unit (m)", "Total Length (m)"])
+        st.subheader("Cable Schedule")
+        st.dataframe(df, use_container_width=True)
+
+        # Drum calculation
+        st.subheader("Order Summary")
+        st.markdown("Recommended number of drums (standard drum lengths: 100m, 500m, 1000m)")
+
+        # Group by size
+        summary = df.groupby("Size (mm²)")["Total Length (m)"].sum().reset_index()
+        summary.columns = ["Size (mm²)", "Total Length (m)"]
+
+        # Add drum recommendation
+        def drum_rec(length):
+            if length <= 100:
+                drums_100 = 1
+                drums_500 = 0
+                drums_1000 = 0
+            elif length <= 500:
+                drums_100 = math.ceil(length / 100)
+                drums_500 = 1
+                drums_1000 = 0
+            else:
+                drums_1000 = math.ceil(length / 1000)
+                drums_500 = 0
+                drums_100 = 0
+            return f"{drums_1000} x 1000m" if drums_1000 else (f"{drums_500} x 500m" if drums_500 else f"{drums_100} x 100m")
+
+        summary["Recommended Drums"] = summary["Total Length (m)"].apply(drum_rec)
+        st.dataframe(summary, use_container_width=True)
+
+        # Grand total
+        grand_total = df["Total Length (m)"].sum()
+        st.metric("Total Cable Length Required", f"{grand_total:.0f} m")
+    else:
+        st.info("No cables to schedule. Enter quantities in the Containment tab or add custom cables above.")
+
+
+# ============================================================================
+# RESULTS TAB
+# ============================================================================
+
 def render_results_tab(calc, unit_counts, inst_counts, fac_loads, shops, hawk):
     st.header("📊 Electrical Load Summary")
     res_load = calc.calculate_residential_load(unit_counts)
@@ -807,7 +934,7 @@ def main():
     proj_info = render_sidebar()
 
     tabs = st.tabs(["🏢 Residential", "⚙️ Common Services", "🏛️ Facilities", "🛍️ Retail",
-                    "🍜 Hawker Centre", "🔌 Distribution", "📦 Containment", "📊 Results"])
+                    "🍜 Hawker Centre", "🔌 Distribution", "📦 Containment", "📋 Cable Schedule", "📊 Results"])
 
     with tabs[0]:
         unit_counts = render_residential_tab(calc)
@@ -830,13 +957,15 @@ def main():
     with tabs[6]:
         render_containment_tab(calc)
     with tabs[7]:
+        render_cable_schedule_tab(calc)
+    with tabs[8]:
         render_results_tab(calc, unit_counts, inst_counts, fac_loads, shops, hawk)
         render_export_tab(calc, unit_counts, inst_counts, fac_loads, shops, hawk)
         with st.expander("Power Factor Correction Calculator"):
             render_pfc_tab(calc)
 
     st.divider()
-    st.caption(f"© 2024 HDB - Electrical Design Load Calculator v4.0 | Project: {proj_info['project_title']} | Reference: {proj_info['project_ref']}")
+    st.caption(f"© 2024 HDB - Electrical Design Load Calculator v5.0 | Project: {proj_info['project_title']} | Reference: {proj_info['project_ref']}")
 
 
 if __name__ == "__main__":
